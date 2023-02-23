@@ -1,0 +1,6 @@
+﻿{
+  "pack": {
+    "pack_format": 12,
+    "description": "Remove the chat report toast when logging into a server."
+  }
+}
