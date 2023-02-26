@@ -1,0 +1,11 @@
+**/node_modules/
+**/*temp*
+**/*.jar
+package-lock.json
+
+# Built files
+**/*.zip
+
+# Files pulled from the Minecraft jar
+/textures/
+/pack.png
