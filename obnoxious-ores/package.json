@@ -1,0 +1,17 @@
+{
+  "name": "ores",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "gifencoder": "^2.0.1",
+    "jimp": "^0.22.7",
+    "png-file-stream": "^1.2.1"
+  }
+}
