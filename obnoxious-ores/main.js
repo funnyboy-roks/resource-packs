@@ -1,28 +1,9 @@
 const Jimp = require('jimp');
 const fs = require('fs');
-const path = require('path');
 const GIFEncoder = require('gifencoder');
 const pngFileStream = require('png-file-stream');
 
-
-const invert = (hex) => {
-    hex >>= 8;
-    b = 255n - BigInt(hex & 0xff);
-
-    hex >>= 8;
-    g = 255n - BigInt(hex & 0xff);
-
-    hex >>= 8;
-    r = 255n - BigInt(hex & 0xff);
-
-    return Number(r << 24n | g << 16n | b << 8n | 255n)
-}
-
-const log = (smth) => {
-    console.log(smth);
-    return smth;
-}
-
+// Convert from int colour to array
 const colour = (hex) => {
     hex = BigInt(hex)
     if (hex & 0xff_00_00_00n) { // Alpha is present
@@ -36,6 +17,7 @@ const colour = (hex) => {
     return [Number(r), Number(g), Number(b)];
 }
 
+// Convert from array to int colour
 const toColour = ([r, g, b]) => {
     r = BigInt(r);
     g = BigInt(g);
@@ -43,6 +25,7 @@ const toColour = ([r, g, b]) => {
     return Number(r << 24n | g << 16n | b << 8n | 255n);
 }
 
+// Darken a hex code by some amount (Doesn't go lower than 0)
 const darken = (hex, amount) => {
     let [r, g, b] = colour(hex);
     r = Math.max(0, r - amount);
@@ -51,11 +34,13 @@ const darken = (hex, amount) => {
     return toColour([r, g, b]);
 }
 
+// Find the "distance" of the provided hex code from black (#000000)
 const distSq = (hex) => {
     let [r, g, b] = colour(hex);
     return r * r + g * g + b * b;
 }
 
+// The largest delta between r, g, or b in the provided hex
 const greyscaleDelta = (hex) => {
     hex = BigInt(hex);
     if (hex & 0xff_00_00_00n) { // Alpha is present
@@ -70,71 +55,70 @@ const greyscaleDelta = (hex) => {
     return [r - b, r - g, b - g].map(Number).map(Math.abs).sort((a, b) => b - a)[0];
 }
 
-const isGreyscale = (hex, tolerance) => {
-    return greyscaleDelta(hex) <= tolerance;
-}
+// Determine if a hex colour is greyscale within a certain tollerance.
+const isGreyscale = (hex, tolerance) => greyscaleDelta(hex) <= tolerance;
 
+// Basically a clone of Python's `range` function
 const range = (min, max) => max < min ? range(max, min).reverse() : Array.from({ length: max - min }, (_, i) => i + min);
+// Repeat an array `count` times
 const repeat = (arr, count) => Array(count).fill(0).flatMap(f => arr);
 
+// Represents the border of the image (order of this array dictates the order by which the outer animation moves)
+// This is repeated a few times to allow the animation to loop (this may not be needed anymore but meh)
 const border = repeat([
     ...range(0, 16).map(n => ({ x: n,  y: 0  })),
     ...range(1, 16).map(n => ({ x: 15, y: n  })),
     ...range(15, 0).map(n => ({ x: n,  y: 15 })),
     ...range(15, 1).map(n => ({ x: 0,  y: n  })),
-], 10);
+], 2);
 
+// Override the colour of certain textures (key is not checked for exact match, just partial)
+// _Note: Do not include the alpha channel, it is added later_
 const colourOverrides = {
-    'ancient_debris': 0xaa0000ff,
-    'coal': 0x313131ff,
+    ancient_debris: 0xaa0000,
+    coal: 0x313131,
 };
 
 const processImage = async (inPath, outPath) => {
     const img = await Jimp.read(inPath);
-    const maxColour = distSq(0xcccccc);
-    const minColour = distSq(0x888888);
+    const maxColour = distSq(0xcccccc); // Min/Max colour are decided by checking the distance from #000
+    const minColour = distSq(0x888888); // ^
     const matchingKey = Object.keys(colourOverrides).filter(k => inPath.includes(k))[0];
-    const pixels = matchingKey
-        ? [colourOverrides[matchingKey]]
-        : range(0, 16)
-            .flatMap(x => range(0, 16).map(y => ({x, y})))
-            .map(({x, y}) => img.getPixelColour(x, y))
-            .filter(c => !isGreyscale(c, 39))
-            .filter(c => distSq(c) <= maxColour)
-            .filter(c => distSq(c) >= minColour)
-            .sort((a, b) => distSq(b) - distSq(a))
-            .map(c => BigInt(c))
-    pixels.unshift(pixels[Math.floor(pixels.length * .75)]);
-    const height = 10; // The factor to increase the height by (true hight is that * 16)
-    const out = new Jimp(img.getWidth(), img.getHeight() * height);
-    const borderColour = BigInt(pixels[0]) | 0xffn
-    //console.log({inPath, borderColour: (borderColour >> 8n).toString(16)});
-    for(let i = 0; i < height; ++i) {
+    let borderColour = 0;
+    if (matchingKey) { // If an override matches, then use it
+        borderColour = colourOverrides[matchingKey] << 8 | 0xff;
+    } else { // Otherwise, get the colours of the ore and use them
+        const pixels = range(0, 16)
+                .flatMap(x => range(0, 16).map(y => ({x, y})))
+                .map(({x, y}) => img.getPixelColour(x, y))
+                .filter(c => !isGreyscale(c, 39))
+                .filter(c => distSq(c) <= maxColour)
+                .filter(c => distSq(c) >= minColour)
+                .sort((a, b) => distSq(b) - distSq(a))
+        borderColour = pixels[Math.floor(pixels.length * .75)] | 0xff; // Find a bright colour, but not the brightest
+    }
+    const frames = 10; // The amount of frames that will be rendered
+    const out = new Jimp(img.getWidth(), img.getHeight() * frames);
+    for(let i = 0; i < frames; ++i) {
         for (let x = 0; x < img.getWidth(); x++) {
             for(let y = 0; y < img.getHeight(); ++y) {
                 out.setPixelColour(img.getPixelColor(x, y), x, y + 16 * i);
             }
         }
-        //const amt = Math.floor(border.length / height);
         const amt = 12;
         const start = i * (amt / 2);
         const pixels = border.slice(start, start + amt);
+        // Get a slightly randomised colour to give it some texture
+        // The | 0x01... is to force it to have some red, so that the alpha checks are true. (Mainly only for Emerald where there is 0 red)
         const col = () => darken(Number(borderColour) | 0x01_00_00_00, Math.floor(Math.random() * 10));
+        // Draw a "+" shape to give the border some width
         pixels.forEach(({x, y}) => {
-            const dTop = 16 * i;
-            if (x >= 1) {
-                out.setPixelColour(col(), x - 1, y + dTop);
-            }
-            if (x <= 14) {
-                out.setPixelColour(col(), x + 1, y + dTop);
-            }
-            if (y >= 1) {
-                out.setPixelColour(col(), x, y - 1 + dTop);
-            }
-            if (y <= 14) {
-                out.setPixelColour(col(), x, y + 1 + dTop);
-            }
-            out.setPixelColour(col(), x, y + dTop);
+            const padTop = 16 * i;
+            if (x >= 1) out.setPixelColour(col(), x - 1, y + padTop);
+            if (x <= 14) out.setPixelColour(col(), x + 1, y + padTop);
+            if (y >= 1) out.setPixelColour(col(), x, y - 1 + padTop);
+            if (y <= 14) out.setPixelColour(col(), x, y + 1 + padTop);
+            out.setPixelColour(col(), x, y + padTop);
         });
     }
 
@@ -144,6 +128,7 @@ const processImage = async (inPath, outPath) => {
 const generatePackPng = async (srcPath) => {
     const img = await Jimp.read(srcPath);
     const out = new Jimp(img.getWidth(), img.getWidth());
+    // Copy a frame from the provided `srcPath` image
     for (let x = 0; x < img.getWidth(); x++) {
         for (let y = 0; y < img.getWidth(); y++) {
             out.setPixelColour(img.getPixelColour(x, y + 1 * img.getWidth()), x, y);
@@ -158,6 +143,7 @@ const generatePackPng = async (srcPath) => {
         fs.mkdirSync('./icon-frames/');
     } catch (e) {}
     const frames = img.getHeight() / img.getWidth();
+    // Using the provided `srcPath` image, generate a GIF of it moving as it would ingame
     for (let i = 0; i < frames; ++i) {
         const out = new Jimp(img.getWidth() * 30, img.getWidth() * 30); // 480x480
         for (let x = 0; x < out.getWidth(); x++) {
@@ -173,6 +159,8 @@ const generatePackPng = async (srcPath) => {
         .pipe(fs.createWriteStream('icon.gif'));
 }
 
+// Generate an image for the modrinth galery that is animated
+// imagePaths should be an array of paths to the images
 const generateGalleryImage = async (imagePaths) => {
     console.log('Generating Gallery Image');
     const images = imagePaths.map(p => p);
@@ -215,6 +203,9 @@ const generateGalleryImage = async (imagePaths) => {
     console.log('Generated Gallery Image');
 }
 
+// The order of this array controls the order in which the ores in the gallery image appear
+// Anything that starts with `-` is ignored by the actual image generation, but put into the gallery image,
+// this is used for the stone/netherrack fillers.
 const files = [
     'coal_ore.png',
     'deepslate_coal_ore.png',
@@ -254,15 +245,16 @@ const files = [
     '-netherrack.png',
 ];
 fs.mkdirSync('./assets/minecraft/textures/block', {recursive: true});
+// The mcmeta to use for each animation - outside of function due to slowness of `JSON.stringify`.
+const mcmeta = JSON.stringify({
+    animation: {
+        interpolate: true,
+        frametime: 2,
+    },
+}, null, 4);
 for (const file of files.filter(f => !f.startsWith('-'))) {
     const srcPath = `../textures/block/${file}`;
     processImage(srcPath, `./assets/minecraft/textures/block/${file}`);
-    const mcmeta = JSON.stringify({
-        animation: {
-            interpolate: true,
-            frametime: 2,
-        },
-    }, null, 4);
     fs.writeFileSync(`./assets/minecraft/textures/block/${file}.mcmeta`, mcmeta);
 }
 generatePackPng('./assets/minecraft/textures/block/diamond_ore.png');
