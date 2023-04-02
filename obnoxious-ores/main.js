@@ -61,7 +61,17 @@ const isGreyscale = (hex, tolerance) => greyscaleDelta(hex) <= tolerance;
 // Basically a clone of Python's `range` function
 const range = (min, max) => max < min ? range(max, min).reverse() : Array.from({ length: max - min }, (_, i) => i + min);
 // Repeat an array `count` times
-const repeat = (arr, count) => Array(count).fill(0).flatMap(f => arr);
+const repeat = (arr, count) => Array(count).fill(0).flatMap(() => arr);
+
+const invertHex = (hex) => {
+    let [r, g, b] = colour(hex);
+    
+    r = 255 - r;
+    g = 255 - g;
+    b = 255 - b;
+
+    return toColour([r, g, b]);
+};
 
 // Represents the border of the image (order of this array dictates the order by which the outer animation moves)
 // This is repeated a few times to allow the animation to loop (this may not be needed anymore but meh)
@@ -75,8 +85,8 @@ const border = repeat([
 // Override the colour of certain textures (key is not checked for exact match, just partial)
 // _Note: Do not include the alpha channel, it is added later_
 const colourOverrides = {
-    ancient_debris: 0xaa0000,
-    coal: 0x313131,
+    //ancient_debris: 0xaa0000,
+    coal: 0x313131, // Literally just a random dark colour :P
 };
 
 const processImage = async (inPath, outPath) => {
@@ -84,9 +94,15 @@ const processImage = async (inPath, outPath) => {
     const maxColour = distSq(0xcccccc); // Min/Max colour are decided by checking the distance from #000
     const minColour = distSq(0x888888); // ^
     const matchingKey = Object.keys(colourOverrides).filter(k => inPath.includes(k))[0];
+    let invert = false;
+    let blueify = false;
     let borderColour = 0;
     if (matchingKey) { // If an override matches, then use it
         borderColour = colourOverrides[matchingKey] << 8 | 0xff;
+    } else if (inPath.includes('ancient_debris')) {
+        invert = true;
+    } else if (inPath.includes('sus')) {
+        blueify = true;
     } else { // Otherwise, get the colours of the ore and use them
         const pixels = range(0, 16)
                 .flatMap(x => range(0, 16).map(y => ({x, y})))
@@ -110,15 +126,21 @@ const processImage = async (inPath, outPath) => {
         const pixels = border.slice(start, start + amt);
         // Get a slightly randomised colour to give it some texture
         // The | 0x01... is to force it to have some red, so that the alpha checks are true. (Mainly only for Emerald where there is 0 red)
-        const col = () => darken(Number(borderColour) | 0x01_00_00_00, Math.floor(Math.random() * 10));
+        if (invert) borderImg = img.clone().invert();
+        if (blueify) borderImg = img.clone().invert().color([
+            { apply: 'red', params: [0xa0] },
+        ]);
+        const col = ({x, y}) => invert || blueify
+            ? borderImg.getPixelColour(x, y)
+            : darken(Number(borderColour) | 0x01_00_00_00, Math.floor(Math.random() * 10));
         // Draw a "+" shape to give the border some width
         pixels.forEach(({x, y}) => {
             const padTop = 16 * i;
-            if (x >= 1) out.setPixelColour(col(), x - 1, y + padTop);
-            if (x <= 14) out.setPixelColour(col(), x + 1, y + padTop);
-            if (y >= 1) out.setPixelColour(col(), x, y - 1 + padTop);
-            if (y <= 14) out.setPixelColour(col(), x, y + 1 + padTop);
-            out.setPixelColour(col(), x, y + padTop);
+            if (x >= 1) out.setPixelColour(col({x, y}), x - 1, y + padTop);
+            if (x <= 14) out.setPixelColour(col({x, y}), x + 1, y + padTop);
+            if (y >= 1) out.setPixelColour(col({x, y}), x, y - 1 + padTop);
+            if (y <= 14) out.setPixelColour(col({x, y}), x, y + 1 + padTop);
+            out.setPixelColour(col({x, y}), x, y + padTop);
         });
     }
 
@@ -154,7 +176,7 @@ const generatePackPng = async (srcPath) => {
         await out.writeAsync('./icon-frames/frame' + i.toString().padStart(2, '0') + '.png');
     }
     const encoder = new GIFEncoder(img.getWidth() * 30, img.getWidth() * 30); // 480x480
-    await pngFileStream('./icon-frames/frame*.png')
+    pngFileStream('./icon-frames/frame*.png')
         .pipe(encoder.createWriteStream({ repeat: 0, delay: 100, quality: 10 }))
         .pipe(fs.createWriteStream('icon.gif'));
 }
@@ -197,7 +219,7 @@ const generateGalleryImage = async (imagePaths) => {
         await frame.writeAsync(framedir + 'frame' + i.toString().padStart(2, '0') + '.png');
     }
     const encoder = new GIFEncoder(frameWidth, frameHeight);
-    await pngFileStream(framedir + 'frame*.png')
+    pngFileStream(framedir + 'frame*.png')
         .pipe(encoder.createWriteStream({ repeat: 0, delay: 100, quality: 10 }))
         .pipe(fs.createWriteStream('./img/gallery-image.gif'));
     console.log('Generated Gallery Image');
@@ -206,6 +228,7 @@ const generateGalleryImage = async (imagePaths) => {
 // The order of this array controls the order in which the ores in the gallery image appear
 // Anything that starts with `-` is ignored by the actual image generation, but put into the gallery image,
 // this is used for the stone/netherrack fillers.
+// Anything that starts with `=` is ignored by the gallery image generation, but not by the image generator
 const files = [
     'coal_ore.png',
     'deepslate_coal_ore.png',
@@ -225,7 +248,10 @@ const files = [
     'redstone_ore.png',
     'deepslate_redstone_ore.png',
 
-    '-stone.png',
+    'suspicious_sand_0.png',
+    '=suspicious_sand_1.png',
+    '=suspicious_sand_2.png',
+    '=suspicious_sand_3.png',
 
     'diamond_ore.png',
     'deepslate_diamond_ore.png',
@@ -233,7 +259,10 @@ const files = [
     'emerald_ore.png',
     'deepslate_emerald_ore.png',
 
-    '-stone.png',
+    'suspicious_gravel_0.png',
+    '=suspicious_gravel_1.png',
+    '=suspicious_gravel_2.png',
+    '=suspicious_gravel_3.png',
     '-netherrack.png',
 
     'nether_gold_ore.png',
@@ -252,17 +281,17 @@ const mcmeta = JSON.stringify({
         frametime: 2,
     },
 }, null, 4);
-for (const file of files.filter(f => !f.startsWith('-'))) {
+for (let file of files.filter(f => !f.startsWith('-'))) {
+    if (file.startsWith('=')) file = file.substring(1);
     const srcPath = `../textures/block/${file}`;
     processImage(srcPath, `./assets/minecraft/textures/block/${file}`);
     fs.writeFileSync(`./assets/minecraft/textures/block/${file}.mcmeta`, mcmeta);
 }
 generatePackPng('./assets/minecraft/textures/block/diamond_ore.png');
-generateGalleryImage(files.map(f => {
-    if(!f.startsWith('-'))
-        return './assets/minecraft/textures/block/' + f;
-    return '../textures/block/' + f.substring(1);
-}));
+generateGalleryImage(files
+    .filter(f => !f.startsWith('='))
+    .map(f => !f.startsWith('-') ? './assets/minecraft/textures/block/' + f : '../textures/block/' + f.substring(1))
+);
 fs.writeFileSync('./pack.mcmeta', JSON.stringify({
     pack: {
         pack_format: 12,
