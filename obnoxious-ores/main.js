@@ -294,7 +294,7 @@ generateGalleryImage(files
 );
 fs.writeFileSync('./pack.mcmeta', JSON.stringify({
     pack: {
-        pack_format: 12,
+        pack_format: 15,
         description: '§6Make ores stand out!\n§3By: funnyboy_roks',
     },
 }, null, 4), 'utf-8');
