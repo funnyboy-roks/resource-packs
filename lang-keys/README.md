@@ -1,6 +1,6 @@
 # Lang Keys
 
-A resource pack which will show language keys in the game.
+A resource pack which shows language keys in the game to help resource pack developers.
 
 ![Example using a Grass Block](https://raw.githubusercontent.com/funnyboy-roks/resource-packs/main/lang-keys/img/grass_block.png)
 
