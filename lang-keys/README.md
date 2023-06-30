@@ -2,7 +2,7 @@
 
 A resource pack which will show language keys in the game.
 
-![https://raw.githubusercontent.com/funnyboy-roks/resource-packs/main/lang-keys/img/grass_block.png](Example using a Grass Block)
+![Example using a Grass Block](https://raw.githubusercontent.com/funnyboy-roks/resource-packs/main/lang-keys/img/grass_block.png)
 
 ## Usage
 
@@ -17,8 +17,8 @@ A resource pack which will show language keys in the game.
 
 ## With Variables
 
-![https://raw.githubusercontent.com/funnyboy-roks/resource-packs/main/lang-keys/img/vars.gif](GIF of usage with vars)
+![GIF of usage with vars](https://raw.githubusercontent.com/funnyboy-roks/resource-packs/main/lang-keys/img/vars.gif)
 
 ## Without Variables
 
-![https://raw.githubusercontent.com/funnyboy-roks/resource-packs/main/lang-keys/img/novars.gif](GIF of usage without vars)
+![GIF of usage without vars](https://raw.githubusercontent.com/funnyboy-roks/resource-packs/main/lang-keys/img/novars.gif)
