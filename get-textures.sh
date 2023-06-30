@@ -10,6 +10,7 @@ unzip "../$1" >> /dev/null
 echo "Jar unzipped."
 echo "Getting textures..."
 cp -r ./assets/minecraft/textures ../
+cp -r ./assets/minecraft/lang ../
 cp ./pack.png ..
 cd ..
 rm -r textures/font

@@ -8,4 +8,5 @@ package-lock.json
 
 # Files pulled from the Minecraft jar
 /textures/
+/lang/
 /pack.png
