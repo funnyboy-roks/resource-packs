@@ -1,0 +1,3 @@
+# The built files (run ./build.sh to get this)
+*.zip
+assets/*/lang/*
